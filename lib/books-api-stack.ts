@@ -1,16 +1,41 @@
-import { Stack, StackProps } from 'aws-cdk-lib';
+import { Duration, Stack, StackProps } from 'aws-cdk-lib';
+import { Architecture, Runtime } from 'aws-cdk-lib/aws-lambda';
+import { NodejsFunction } from 'aws-cdk-lib/aws-lambda-nodejs';
 import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import * as path from 'path';
+import { BookApiConstruct } from './books-api-construct';
+import { BookTableConstruct } from './books-dynamodb-table-construct';
+
 
 export class BooksApiStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    const bookApiFunction = new NodejsFunction(this, 'books-api-handler', {
+      entry: path.join(__dirname, '../src/functions/books-api-handler.ts'),
+      bundling: {
+        minify: true,
+        sourceMap: true,
+        sourcesContent: false,
+        externalModules: ['aws-sdk'],
+        esbuildArgs: {
+          "--analyze":true
+        }
+      },
+      runtime: Runtime.NODEJS_16_X,
+      architecture: Architecture.ARM_64,
+      timeout: Duration.seconds(5),
+      memorySize: 512
+    });
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'BooksApiQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
-  }
+    new BookTableConstruct(this, 'book-table', bookApiFunction);
+
+    new BookApiConstruct(this, 'book-api', {
+      handler: bookApiFunction,
+      cognitoUserPoolProps: {
+        userPoolName: 'book-user-pool'
+      }
+    });
+
+}
 }
