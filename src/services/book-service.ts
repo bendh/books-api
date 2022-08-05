@@ -65,7 +65,9 @@ export const getBooks = async function(isbn?: string, bookData?: BookMutation): 
     return queryResult.Items?.map<Book>(item=>itemToBookMapper(item)) || [];
 }
 
-export const saveBook = async function(bookData: Book): Promise<void> {
+export const saveBook = async function(bookData: Book): Promise<string[] | true> {
+    const validity = isValidBookData(bookData);
+    if (validity !== true) return validity as string[];
     const itemsToWrite = mapBookToRecords(bookData);
     const chunkSize = 25;
     const chunksToWrite = [];
@@ -86,7 +88,7 @@ export const saveBook = async function(bookData: Book): Promise<void> {
         });
         logger.info({message: `write result: ${writeResult}` });
     });
-    
+    return true;
 
 }
 

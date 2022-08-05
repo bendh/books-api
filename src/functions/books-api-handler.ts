@@ -1,5 +1,5 @@
 import { APIGatewayProxyResult, APIGatewayEvent } from 'aws-lambda';
-import { Book, getBooks } from '../services/book-service';
+import { Book, getBooks, saveBook } from '../services/book-service';
 import { injectLambdaContext, Logger } from '@aws-lambda-powertools/logger';
 import middy from '@middy/core';
 
@@ -30,6 +30,19 @@ const rawHandler = async function(request: APIGatewayEvent) : Promise<APIGateway
                     body: JSON.stringify(await getBooks())
                 }
             case 'POST':
+                const result = await saveBook(JSON.parse(request.body || ''))
+                if (result === true) {
+                    return {
+                        statusCode: 200,
+                        body: 'saved'
+                    }
+                } else {
+                    return {
+                        statusCode: 400,
+                        body: JSON.stringify(result)
+                    }
+                }
+
             default:
                 return errorResponse(`Method ${request.httpMethod} is not supported for /product`)
         }
