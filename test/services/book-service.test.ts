@@ -1,4 +1,5 @@
 //import { log } from "console";
+import { log } from "console";
 import { Book, BookMutation, isBookMutation, isValidBookData } from "../../src/services/book-service";
 
 describe('Book validation test suite', ()=>{
@@ -30,6 +31,7 @@ describe('Book validation test suite', ()=>{
     });
 
     test('book validation succeed with a valid 10 isbn', ()=>{
+        log(JSON.stringify(testBook(), undefined, 2))
         expect(isValidBookData(testBook())).toEqual(true);
     });
 

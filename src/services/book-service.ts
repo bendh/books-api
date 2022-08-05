@@ -70,24 +70,30 @@ export const saveBook = async function(bookData: Book): Promise<string[] | true>
     if (validity !== true) return validity as string[];
     const itemsToWrite = mapBookToRecords(bookData);
     const chunkSize = 25;
-    const chunksToWrite = [];
-    logger.info({message: `write result: ${itemsToWrite}` });
+    const chunksToWrite: (BookRecord | BaseRecord)[][] = [];
+    logger.info({message: `items to write: ${JSON.stringify(chunksToWrite)}` });
     while( itemsToWrite.length !==0) {
         chunksToWrite.push(itemsToWrite.splice(0, chunkSize))
     }
-    chunksToWrite.forEach(chunk => {
+    chunksToWrite.forEach(async chunk => {
         const putRequests = chunk.map(record=>{
             return {
                 Item: record
             }
         })
-        const writeResult = ddbDocClient.batchWrite({
+        const writeResult = await ddbDocClient.batchWrite({
             RequestItems: {
                 'Book': putRequests
             }
         });
-        logger.info({message: `write result: ${writeResult}` });
+        logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
     });
+    const writeResult = await ddbDocClient.batchWrite({
+        RequestItems: {
+            'Book': itemsToWrite
+        }
+    });
+    logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
     return true;
 
 }
@@ -158,42 +164,37 @@ class BookRecord {
 }
 
 abstract class BaseRecord {
-    readonly SKPrefix = 'ISBN#'
-    readonly abstract  keyPrefix: string;
     entityid: string;
     readonly sortKey: string;
     readonly bookData: Book;
 
     constructor(book: Book) {
-        this.sortKey = this.SKPrefix + book.isbn;
+        this.sortKey = 'ISBN#' + book.isbn;
         this.bookData = {...book};
     }
 }
 
 class CountryRecord extends BaseRecord{
-    readonly keyPrefix = 'COUNTRY#'
 
     constructor(book: Book, country: string) {
         super(book);
-        this.entityid = this.keyPrefix + country;
+        this.entityid = 'COUNTRY#' + country;
     }
 }
 
 class LanguageRecord extends BaseRecord{
-    readonly keyPrefix = 'LANGUAGE#'
 
     constructor(book: Book, language: string) {
         super(book);
-        this.entityid = this.keyPrefix + language;
+        this.entityid = 'LANGUAGE#' + language;
     }
 }
 
 class AuthorRecord extends BaseRecord{
-    readonly keyPrefix = 'AUTHOR#'
 
     constructor(book: Book, author: string) {
         super(book);
-        this.entityid = this.keyPrefix + author;
+        this.entityid = 'AUTHOR#' + author;
     }
 }
 
