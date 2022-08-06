@@ -1,18 +1,16 @@
 import { whereCountry } from "iso-3166-1";
 const isIsbn: any = require('is-isbn'); // No typescript def files available
 const ISO6391 = require('iso-639-1');
-import { DynamoDBDocument } from "@aws-sdk/lib-dynamodb";
-import { DynamoDB, PutRequest } from "@aws-sdk/client-dynamodb";
+import { DynamoDBDocument, QueryCommandInput, ScanCommandInput } from "@aws-sdk/lib-dynamodb";
+import { DynamoDB, PutRequest } from '@aws-sdk/client-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
-import { name } from "aws-sdk/clients/importexport";
-import { numberToCloudFormation } from "aws-cdk-lib";
-import { log } from "console";
 
 const client = new DynamoDB({});
-const ddbDocClient = DynamoDBDocument.from(client);
+const marshallOptions = {
+    convertClassInstanceToMap: true,
+};
+const ddbDocClient = DynamoDBDocument.from(client, { marshallOptions });
 const logger = new Logger();
-
-
 export interface Book {
     isbn: string,
     name: string,
@@ -25,6 +23,10 @@ export interface Book {
 
 export type BookMutation = Omit<Book, 'isbn'>;
 export type BookKeys = keyof Book;
+export interface BookFilter {
+    key: BookKeys,
+    value: string
+}
 
 export const isBookMutation = function(book: Book | BookMutation): book is BookMutation {
     return (book as Book).isbn === undefined;
@@ -41,9 +43,14 @@ export const isValidBookData = function(data: Book | BookMutation): string[] | b
     return validationErrors.length == 0? true : validationErrors;
 }
 
-export const getBook = function(filterKey: BookKeys, filterValue: string): Book {
-    switch(filterKey){
-        case "isbn": 
+export const getBookByFilter = function(filter: BookFilter): Promise<Book[]> {
+
+    switch(filter.key){
+        case "isbn":
+            const query: QueryCommandInput = {
+                TableName: 'Book',
+                
+            }
         case "name":
         case "authors":
         case "pages":
@@ -59,7 +66,8 @@ export const getBooks = async function(isbn?: string, bookData?: BookMutation): 
         {
             TableName: 'Book',
             FilterExpression : 'sortKey = :value',
-            ExpressionAttributeValues : {':value' : "METADATA"}
+            ExpressionAttributeValues : {':value' : "METADATA"},
+            Limit: 100
         }
     )
     return queryResult.Items?.map<Book>(item=>itemToBookMapper(item)) || [];
@@ -71,29 +79,37 @@ export const saveBook = async function(bookData: Book): Promise<string[] | true>
     const itemsToWrite = mapBookToRecords(bookData);
     const chunkSize = 25;
     const chunksToWrite: (BookRecord | BaseRecord)[][] = [];
-    logger.info({message: `items to write: ${JSON.stringify(chunksToWrite)}` });
+    
     while( itemsToWrite.length !==0) {
         chunksToWrite.push(itemsToWrite.splice(0, chunkSize))
     }
-    chunksToWrite.forEach(async chunk => {
-        const putRequests = chunk.map(record=>{
-            return {
-                Item: record
-            }
+
+    await Promise.all(
+        chunksToWrite.map(async (chunk) => {
+            const putRequests = chunk.map((record, recordIndex)=>{
+                const putRequest = {
+                    Put: {
+                        Item: record,
+                        TableName: 'Book',
+                        ConditionExpression: `#PK <> :pkv AND #SK <> :skv`,
+                        ExpressionAttributeNames: {
+                            "#PK": "entityId",
+                            "#SK": "sortKey"
+                        },
+                        ExpressionAttributeValues: {
+                            ":pkv": record.entityId,
+                            ":skv": record.sortKey
+                        }
+                    }
+                };
+                return putRequest;
+            });
+            const writeResult = await ddbDocClient.transactWrite({
+                TransactItems: putRequests
+            });
+            logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
         })
-        const writeResult = await ddbDocClient.batchWrite({
-            RequestItems: {
-                'Book': putRequests
-            }
-        });
-        logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
-    });
-    const writeResult = await ddbDocClient.batchWrite({
-        RequestItems: {
-            'Book': itemsToWrite
-        }
-    });
-    logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
+    );
     return true;
 
 }
@@ -142,8 +158,7 @@ function itemToBookMapper(item: Record<string, any>): Book {
 }
 
 class BookRecord {
-   readonly keyPrefix = 'ISBN#'
-   readonly entityid: string;
+   readonly entityId: string;
    readonly sortKey = 'METADATA';
    readonly name: string;
    readonly pages: number;
@@ -153,7 +168,7 @@ class BookRecord {
    readonly countries: string[] = [];
 
    constructor(book: Book) {
-    this.entityid = this.keyPrefix + book.isbn;
+    this.entityId = 'ISBN#' + book.isbn;
     this.name = book.name;
     this.pages = book.pages;
     this.releaseDate = book.releaseDate;
@@ -164,7 +179,7 @@ class BookRecord {
 }
 
 abstract class BaseRecord {
-    entityid: string;
+    entityId: string;
     readonly sortKey: string;
     readonly bookData: Book;
 
@@ -178,7 +193,7 @@ class CountryRecord extends BaseRecord{
 
     constructor(book: Book, country: string) {
         super(book);
-        this.entityid = 'COUNTRY#' + country;
+        this.entityId = 'COUNTRY#' + country;
     }
 }
 
@@ -186,7 +201,7 @@ class LanguageRecord extends BaseRecord{
 
     constructor(book: Book, language: string) {
         super(book);
-        this.entityid = 'LANGUAGE#' + language;
+        this.entityId = 'LANGUAGE#' + language;
     }
 }
 
@@ -194,7 +209,7 @@ class AuthorRecord extends BaseRecord{
 
     constructor(book: Book, author: string) {
         super(book);
-        this.entityid = 'AUTHOR#' + author;
+        this.entityId = 'AUTHOR#' + author;
     }
 }
 
