@@ -1,5 +1,5 @@
 import { APIGatewayProxyResult, APIGatewayEvent, APIGatewayProxyEvent } from 'aws-lambda';
-import { Book, getBooks, saveBook } from '../services/book-service';
+import { Book, BookKeys, getBookByFilter, getBooks, isBookKey, saveBook } from '../services/book-service';
 import { injectLambdaContext, Logger } from '@aws-lambda-powertools/logger';
 import middy from '@middy/core';
 
@@ -27,9 +27,12 @@ const rawHandler = async function(request: APIGatewayEvent) : Promise<APIGateway
             return await handleBookResourceRequest(request);
         } catch (error) {
             logger.error({message: (error as Error).message});
+            if ((error as Error).message.includes('ConditionalCheckFailed')) {
+                return errorResponse([`Error handling ${request.httpMethod}, Book with already exists`]);
+            }
             return errorResponse([`Error handling ${request.httpMethod} ${request.path} operation with unexpected error`]);
         }
-    } else if(request.path.startsWith('/product/') && !request.path.endsWith('/')){
+    } else if(request.path.startsWith('/book/') && !request.path.endsWith('/')){
         const isbn = request.pathParameters?.isbn;
         try {
             if (!isbn) throw new Error('isbn is required');
@@ -53,9 +56,24 @@ export const handler = middy(rawHandler)
 async function handleBookResourceRequest(request: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> {
     switch(request.httpMethod) {
         case 'GET':
-            return {
-                statusCode: 200,
-                body: JSON.stringify(await getBooks())
+            const queryParams = request.queryStringParameters;
+            logger.info(`query params: ${queryParams}`)
+            if (queryParams) {
+                const validQueryParameters =  Object.keys(queryParams).filter(key => isBookKey(key) && (queryParams[key] && queryParams[key] !== ''))
+                if (validQueryParameters.length === 1) {
+                    const key =validQueryParameters[0];
+                    const value = queryParams[validQueryParameters[0]] as string;
+                    const books = await getBookByFilter({key, value})
+                    return successResponse(books);
+                } else {
+                    logger.error(`No valid filter found in query params ${queryParams}`)
+                    return errorResponse(['Provided query parameters does not contain accepted query parameters'])
+                }
+            } else {
+                return {
+                    statusCode: 200,
+                    body: JSON.stringify(await getBooks())
+                }
             }
         case 'POST':
             const result = await saveBook(JSON.parse(request.body || ''))

@@ -16,7 +16,7 @@ export class BooksApiStack extends Stack {
       bundling: {
         minify: true,
         sourceMap: true,
-        sourcesContent: false,
+        sourcesContent: true,
         externalModules: ['aws-sdk'],
         esbuildArgs: {
           "--analyze":true

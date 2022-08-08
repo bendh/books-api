@@ -1,6 +1,6 @@
 //import { log } from "console";
 import { log } from "console";
-import { Book, BookMutation, isBookMutation, isValidBookData } from "../../src/services/book-service";
+import { Book, BookMutation, isBookKey, isBookMutation, isValidBookData } from "../../src/services/book-service";
 
 describe('Book validation test suite', ()=>{
     test('Book mutation is of type BookMutation', ()=>{
@@ -28,6 +28,17 @@ describe('Book validation test suite', ()=>{
         };
 
         expect(isBookMutation(book)).toBeFalsy();
+    });
+
+    test('Valid book key is asserted as valid bookKeys',()=> {
+        const validBookKey = 'isbn'
+        expect(isBookKey(validBookKey)).toBeTruthy();
+    });
+
+    test('Invalid book key is asserted as invalid bookKeys',()=> {
+        const invalidKey = 'foo'
+        log(isBookKey(invalidKey))
+        expect(isBookKey(invalidKey)).toBeFalsy();
     });
 
     test('book validation succeed with a valid 10 isbn', ()=>{

@@ -42,7 +42,7 @@ export class BookTableConstruct extends Construct {
             type: AttributeType.STRING
         },
         projectionType: ProjectionType.INCLUDE,
-        nonKeyAttributes: ['pages', 'releaseDate']
+        nonKeyAttributes: ['pages', 'releaseDate', 'countries', 'languages', 'authors']
         });
 
         bookTable.addGlobalSecondaryIndex({
@@ -56,7 +56,7 @@ export class BookTableConstruct extends Construct {
             type: AttributeType.STRING
         },
         projectionType: ProjectionType.INCLUDE,
-        nonKeyAttributes: ['name', 'releaseDate']
+        nonKeyAttributes: ['name', 'releaseDate','countries', 'languages', 'authors']
         });
 
         bookTable.addGlobalSecondaryIndex({
@@ -70,7 +70,7 @@ export class BookTableConstruct extends Construct {
             type: AttributeType.STRING
         },
         projectionType: ProjectionType.INCLUDE,
-        nonKeyAttributes: ['name', 'pages']
+        nonKeyAttributes: ['name', 'pages','countries', 'languages', 'authors']
         });
 
         bookTable.addGlobalSecondaryIndex({

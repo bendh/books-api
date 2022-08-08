@@ -24,12 +24,25 @@ export interface Book {
 export type BookMutation = Omit<Book, 'isbn'>;
 export type BookKeys = keyof Book;
 export interface BookFilter {
-    key: BookKeys,
+    key: string,
     value: string
 }
 
 export const isBookMutation = function(book: Book | BookMutation): book is BookMutation {
     return (book as Book).isbn === undefined;
+}
+
+export const isBookKey = (key: string): key is BookKeys => {
+    const book: Book = {
+        isbn: '',
+        name: '',
+        pages: 0,
+        releaseDate: '',
+        authors: [],
+        countries: [],
+        languages: []
+    }
+    return Object.keys(book).includes(key);
 }
 
 export const isValidBookData = function(data: Book | BookMutation): string[] | boolean {
@@ -43,20 +56,44 @@ export const isValidBookData = function(data: Book | BookMutation): string[] | b
     return validationErrors.length == 0? true : validationErrors;
 }
 
-export const getBookByFilter = function(filter: BookFilter): Promise<Book[]> {
-
+export const getBookByFilter = async function(filter: BookFilter): Promise<Book[]> {
     switch(filter.key){
         case "isbn":
-            const query: QueryCommandInput = {
+            const isbnQuery: QueryCommandInput = {
                 TableName: 'Book',
-                
-            }
+                KeyConditionExpression: "#entityId = :entityId AND #sortKey = :sortKey",
+                ExpressionAttributeNames: {
+                    "#entityId": 'entityId',
+                    "#sortKey": 'sortKey',
+                    "#name" : 'name',
+                    "#languages": 'languages',
+                    "#pages": 'pages',
+                    "#releaseDate": 'releaseDate',
+                    "#authors": 'authors',
+                    "#countries": 'countries'
+                },
+                ExpressionAttributeValues: {
+                    ":entityId": `ISBN#${filter.value}`,
+                    ":sortKey" : 'METADATA'
+                },
+                ProjectionExpression: '#entityId, #name, #pages, #releaseDate, #authors, #countries, #languages'
+            };
+            const isbnQueryResult = await ddbDocClient.query(isbnQuery);
+            return isbnQueryResult.Items?.map( record => {
+                return BookRecord.convertToBook(record as BookRecord);
+            }) || [];
         case "name":
-        case "authors":
+            return executeStringFieldQuery('nameIndex', filter.value, filter.key);
         case "pages":
+            return executeStringFieldQuery('numberofPagesIndex', parseInt(filter.value), filter.key);
         case "releaseDate":
+            return executeStringFieldQuery('releaseDateIndex', filter.value, filter.key);
+        case "authors":
+            return executeCollectionFieldQuery(`AUTHOR#${filter.value}`)
         case "languages":
+            return executeCollectionFieldQuery(`LANGUAGE#${filter.value}`)
         case "countries":
+            return executeCollectionFieldQuery(`COUNTRY#${filter.value}`)
     }
     throw new Error('Not implemented')
 }
@@ -176,6 +213,14 @@ class BookRecord {
     this.languages = book.languages;
     this.countries = book.countries;
    }
+
+   static convertToBook(bookRecord: BookRecord): Book {
+    const isbn = bookRecord.entityId.replace('ISBN#', '');
+    return {
+        isbn,
+        ...(bookRecord as BookMutation)
+    }
+   }
 }
 
 abstract class BaseRecord {
@@ -206,7 +251,6 @@ class LanguageRecord extends BaseRecord{
 }
 
 class AuthorRecord extends BaseRecord{
-
     constructor(book: Book, author: string) {
         super(book);
         this.entityId = 'AUTHOR#' + author;
@@ -220,4 +264,49 @@ function mapBookToRecords(book: Book): Array<BaseRecord|BookRecord> {
     records.push(...book.languages.map<LanguageRecord>(language => new LanguageRecord(book, language)));
     records.push(...book.countries.map<CountryRecord>(country => new CountryRecord(book, country)));
     return records;
-} 
+}
+
+async function executeStringFieldQuery(indexName: string, queryValue: string | number, PKColumn: string): Promise<Book[]> {
+    const query: QueryCommandInput = {
+        TableName: 'Book',
+        IndexName: indexName,
+        KeyConditionExpression: "#PK = :PKValue",
+        ExpressionAttributeNames: {
+            "#PK": PKColumn,
+            "#entityId": 'entityId',
+            "#name" : 'name',
+            "#languages": 'languages',
+            "#pages": 'pages',
+            "#releaseDate": 'releaseDate',
+            "#authors": 'authors',
+            "#countries": 'countries'
+        },
+        ExpressionAttributeValues: {
+            ":PKValue": queryValue
+        },
+        ProjectionExpression: '#entityId, #name, #pages, #releaseDate, #authors, #countries, #languages'
+    };
+    const nameQueryResult = await ddbDocClient.query(query);
+    return nameQueryResult.Items?.map( record => {
+        return BookRecord.convertToBook(record as BookRecord);
+    }) || [];
+}
+
+async function executeCollectionFieldQuery(entityId: string): Promise<Book[]> {
+    const query: QueryCommandInput = {
+        TableName: 'Book',
+        KeyConditionExpression: "#entityId = :entityId",
+        ExpressionAttributeNames: {
+            "#entityId": 'entityId',
+            "#bookData": 'bookData'
+        },
+        ExpressionAttributeValues: {
+            ":entityId": `${entityId}`
+        },
+        ProjectionExpression: '#bookData'
+    };
+    const authorQueryResult = await ddbDocClient.query(query);
+    return authorQueryResult.Items?.map( record => {
+        return record as Book;
+    }) || [];
+}
