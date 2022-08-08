@@ -1,5 +1,3 @@
-//import { log } from "console";
-import { log } from "console";
 import { Book, BookMutation, isBookKey, isBookMutation, isValidBookData } from "../../src/services/book-service";
 
 describe('Book validation test suite', ()=>{
@@ -37,12 +35,10 @@ describe('Book validation test suite', ()=>{
 
     test('Invalid book key is asserted as invalid bookKeys',()=> {
         const invalidKey = 'foo'
-        log(isBookKey(invalidKey))
         expect(isBookKey(invalidKey)).toBeFalsy();
     });
 
     test('book validation succeed with a valid 10 isbn', ()=>{
-        log(JSON.stringify(testBook(), undefined, 2))
         expect(isValidBookData(testBook())).toEqual(true);
     });
 
@@ -96,6 +92,8 @@ describe('Book validation test suite', ()=>{
     });
 
 });
+
+// TODO add integration tests with mocked Dynamodb client
 
 const testBookMutation = function(withValues: Partial<BookMutation>): BookMutation {
     const validTestBookMutation = {

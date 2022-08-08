@@ -1,5 +1,5 @@
 import { APIGatewayProxyResult, APIGatewayEvent, APIGatewayProxyEvent } from 'aws-lambda';
-import { Book, BookKeys, getBookByFilter, getBooks, isBookKey, saveBook } from '../services/book-service';
+import { Book, BookMutation, deleteBook, getBookByFilter, getBooks, isBookKey, saveBook } from '../services/book-service';
 import { injectLambdaContext, Logger } from '@aws-lambda-powertools/logger';
 import middy from '@middy/core';
 
@@ -59,6 +59,7 @@ async function handleBookResourceRequest(request: APIGatewayProxyEvent): Promise
             const queryParams = request.queryStringParameters;
             logger.info(`query params: ${queryParams}`)
             if (queryParams) {
+                // TODO query names in plural should be singular to avoid confusion
                 const validQueryParameters =  Object.keys(queryParams).filter(key => isBookKey(key) && (queryParams[key] && queryParams[key] !== ''))
                 if (validQueryParameters.length === 1) {
                     const key =validQueryParameters[0];
@@ -76,7 +77,7 @@ async function handleBookResourceRequest(request: APIGatewayProxyEvent): Promise
                 }
             }
         case 'POST':
-            const result = await saveBook(JSON.parse(request.body || ''))
+            const result = await saveBook((JSON.parse(request.body!)), false);
             if (result === true) {
                 return {
                     statusCode: 200,
@@ -93,12 +94,33 @@ async function handleBookResourceRequest(request: APIGatewayProxyEvent): Promise
 async function handleBookDetailRequest(request: APIGatewayProxyEvent, isbn: string): Promise<APIGatewayProxyResult> {
     switch(request.httpMethod) {
         case 'GET':
-            return successResponse("To implement get Item");
+            const books = await getBookByFilter({key: 'isbn', value: isbn});
+            if (books.length === 1) {
+                return successResponse(books[0]);
+            }
+            return errorResponse([`Book with isbn ${isbn} not found`]);
         case 'PUT':
-            const bookToSave = JSON.parse(request.body!) as Book;
-            return successResponse('To implement update item');
+            const bookData: Book = {isbn, ...(JSON.parse(request.body!) as BookMutation)};
+            const result = await saveBook(bookData, true);
+            if (result === true) {
+                return {
+                    statusCode: 200,
+                    body: `Book with isbn ${isbn} updated`
+                }
+            } else {
+                return errorResponse(result);
+            }
         case 'DELETE': {
-            return successResponse('To implement delete item');
+            // TODO delete all old records 
+            const result = await deleteBook(isbn);
+            if (result === true) {
+                return {
+                    statusCode: 200,
+                    body: `Book with isbn ${isbn} updated`
+                }
+            } else {
+                return errorResponse(result);
+            }
         }
         default:
             return errorResponse([`Method ${request.httpMethod} is not supported for ${request.path}`])

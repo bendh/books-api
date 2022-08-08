@@ -98,7 +98,7 @@ export const getBookByFilter = async function(filter: BookFilter): Promise<Book[
     throw new Error('Not implemented')
 }
 
-export const getBooks = async function(isbn?: string, bookData?: BookMutation): Promise<Book[]> {
+export const getBooks = async function(): Promise<Book[]> {
     const queryResult = await ddbDocClient.scan(
         {
             TableName: 'Book',
@@ -110,13 +110,12 @@ export const getBooks = async function(isbn?: string, bookData?: BookMutation): 
     return queryResult.Items?.map<Book>(item=>itemToBookMapper(item)) || [];
 }
 
-export const saveBook = async function(bookData: Book): Promise<string[] | true> {
+export const saveBook = async function(bookData: Book, newBook: boolean): Promise<string[] | true> {
     const validity = isValidBookData(bookData);
     if (validity !== true) return validity as string[];
     const itemsToWrite = mapBookToRecords(bookData);
     const chunkSize = 25;
     const chunksToWrite: (BookRecord | BaseRecord)[][] = [];
-    
     while( itemsToWrite.length !==0) {
         chunksToWrite.push(itemsToWrite.splice(0, chunkSize))
     }
@@ -124,19 +123,23 @@ export const saveBook = async function(bookData: Book): Promise<string[] | true>
     await Promise.all(
         chunksToWrite.map(async (chunk) => {
             const putRequests = chunk.map((record, recordIndex)=>{
+                const conditionExpression = {
+                    ConditionExpression: `#PK <> :pkv AND #SK <> :skv`,
+                                    ExpressionAttributeNames: {
+                                        "#PK": "entityId",
+                                        "#SK": "sortKey"
+                                    },
+                                    ExpressionAttributeValues: {
+                                        ":pkv": record.entityId,
+                                        ":skv": record.sortKey
+                                    }
+                };
+                const condition = newBook? {} : conditionExpression;
                 const putRequest = {
                     Put: {
                         Item: record,
                         TableName: 'Book',
-                        ConditionExpression: `#PK <> :pkv AND #SK <> :skv`,
-                        ExpressionAttributeNames: {
-                            "#PK": "entityId",
-                            "#SK": "sortKey"
-                        },
-                        ExpressionAttributeValues: {
-                            ":pkv": record.entityId,
-                            ":skv": record.sortKey
-                        }
+                        ...condition
                     }
                 };
                 return putRequest;
@@ -155,7 +158,7 @@ export const updateBook = function(isbn: string, bookData: BookMutation): Book {
     throw new Error('Not implemented')
 }
 
-export const deleteBook = function(isbn: string): void {
+export const deleteBook = function(isbn: string): Promise<string[] | true> {
     throw new Error('Not implemented')
 }
 
