@@ -111,12 +111,11 @@ async function handleBookDetailRequest(request: APIGatewayProxyEvent, isbn: stri
                 return errorResponse(result);
             }
         case 'DELETE': {
-            // TODO delete all old records 
             const result = await deleteBook(isbn);
             if (result === true) {
                 return {
                     statusCode: 200,
-                    body: `Book with isbn ${isbn} updated`
+                    body: `Book with isbn ${isbn} deleted`
                 }
             } else {
                 return errorResponse(result);

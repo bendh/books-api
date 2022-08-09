@@ -115,14 +115,11 @@ export const saveBook = async function(bookData: Book, newBook: boolean): Promis
     if (validity !== true) return validity as string[];
     const itemsToWrite = mapBookToRecords(bookData);
     const chunkSize = 25;
-    const chunksToWrite: (BookRecord | BaseRecord)[][] = [];
-    while( itemsToWrite.length !==0) {
-        chunksToWrite.push(itemsToWrite.splice(0, chunkSize))
-    }
+    const chunksToWrite: (BookRecord | BaseRecord)[][] = splitBookRecordArrayInChunks(chunkSize, itemsToWrite);
 
     await Promise.all(
         chunksToWrite.map(async (chunk) => {
-            const putRequests = chunk.map((record, recordIndex)=>{
+            const putRequests = chunk.map((record)=>{
                 const conditionExpression = {
                     ConditionExpression: `#PK <> :pkv AND #SK <> :skv`,
                                     ExpressionAttributeNames: {
@@ -154,12 +151,35 @@ export const saveBook = async function(bookData: Book, newBook: boolean): Promis
 
 }
 
-export const updateBook = function(isbn: string, bookData: BookMutation): Book {
-    throw new Error('Not implemented')
-}
-
-export const deleteBook = function(isbn: string): Promise<string[] | true> {
-    throw new Error('Not implemented')
+export const  deleteBook = async function(isbn: string): Promise<string[] | true> {
+    const bookToDelete: Book = (await getBookByFilter({key: 'isbn', value: isbn}))[0];
+    if(bookToDelete) {
+        const recordToDelete = mapBookToRecords(bookToDelete);
+        const recordChunks = splitBookRecordArrayInChunks(25, recordToDelete);
+        await Promise.all(
+            recordChunks.map(async (chunk) => {
+                const deleteRequests = chunk.map((record)=>{
+                    const putRequest = {
+                        Delete: {
+                            TableName: 'Book',
+                            Key: {
+                                "entityId": record.entityId,
+                                "sortKey": record.sortKey
+                            }
+                        }
+                    };
+                    return putRequest;
+                });
+                const writeResult = await ddbDocClient.transactWrite({
+                    TransactItems: deleteRequests
+                });
+                logger.info({message: `write result: ${JSON.stringify(writeResult)}` });
+            })
+        );
+        return true;
+    } else {
+        return [`Book not found with isbn ${isbn}`]
+    }
 }
 
 function validIsbn(isbn: string): boolean {
@@ -195,6 +215,14 @@ function itemToBookMapper(item: Record<string, any>): Book {
         languages: item.languages,
         countries: item.countries
     } 
+}
+
+function splitBookRecordArrayInChunks(chunkSize: number, arrayToSplit: Array<BaseRecord|BookRecord>): (BookRecord | BaseRecord)[][] {
+    const chunksToWrite: (BookRecord | BaseRecord)[][] = [];
+    while( arrayToSplit.length !==0) {
+        chunksToWrite.push(arrayToSplit.splice(0, chunkSize))
+    }
+    return chunksToWrite;
 }
 
 class BookRecord {
