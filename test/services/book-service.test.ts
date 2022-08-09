@@ -1,4 +1,5 @@
-import { Book, BookMutation, isBookKey, isBookMutation, isValidBookData } from "../../src/services/book-service";
+import { isBookKey, isBookMutation, isValidBookData } from "../../src/services/book-service";
+import { Book, BookMutation } from "../../src/services/models";
 
 describe('Book validation test suite', ()=>{
     test('Book mutation is of type BookMutation', ()=>{

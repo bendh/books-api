@@ -2,8 +2,9 @@ import { whereCountry } from "iso-3166-1";
 const isIsbn: any = require('is-isbn'); // No typescript def files available
 const ISO6391 = require('iso-639-1');
 import { DynamoDBDocument, QueryCommandInput, ScanCommandInput } from "@aws-sdk/lib-dynamodb";
-import { DynamoDB, PutRequest } from '@aws-sdk/client-dynamodb';
+import { DynamoDB } from '@aws-sdk/client-dynamodb';
 import { Logger } from '@aws-lambda-powertools/logger';
+import { BookRecord, BaseRecord, AuthorRecord, LanguageRecord, CountryRecord, Book, BookMutation, BookKeys, BookFilter } from "./models";
 
 const client = new DynamoDB({});
 const marshallOptions = {
@@ -11,22 +12,6 @@ const marshallOptions = {
 };
 const ddbDocClient = DynamoDBDocument.from(client, { marshallOptions });
 const logger = new Logger();
-export interface Book {
-    isbn: string,
-    name: string,
-    pages: number,
-    releaseDate: string,
-    authors: Array<string>,
-    countries: Array<string>,
-    languages: Array<string>
-}
-
-export type BookMutation = Omit<Book, 'isbn'>;
-export type BookKeys = keyof Book;
-export interface BookFilter {
-    key: string,
-    value: string
-}
 
 export const isBookMutation = function(book: Book | BookMutation): book is BookMutation {
     return (book as Book).isbn === undefined;
@@ -223,69 +208,6 @@ function splitBookRecordArrayInChunks(chunkSize: number, arrayToSplit: Array<Bas
         chunksToWrite.push(arrayToSplit.splice(0, chunkSize))
     }
     return chunksToWrite;
-}
-
-class BookRecord {
-   readonly entityId: string;
-   readonly sortKey = 'METADATA';
-   readonly name: string;
-   readonly pages: number;
-   readonly releaseDate: string;
-   readonly authors: string[] = [];
-   readonly languages: string[] = [];
-   readonly countries: string[] = [];
-
-   constructor(book: Book) {
-    this.entityId = 'ISBN#' + book.isbn;
-    this.name = book.name;
-    this.pages = book.pages;
-    this.releaseDate = book.releaseDate;
-    this.authors = book.authors;
-    this.languages = book.languages;
-    this.countries = book.countries;
-   }
-
-   static convertToBook(bookRecord: BookRecord): Book {
-    const isbn = bookRecord.entityId.replace('ISBN#', '');
-    return {
-        isbn,
-        ...(bookRecord as BookMutation)
-    }
-   }
-}
-
-abstract class BaseRecord {
-    entityId: string;
-    readonly sortKey: string;
-    readonly bookData: Book;
-
-    constructor(book: Book) {
-        this.sortKey = 'ISBN#' + book.isbn;
-        this.bookData = {...book};
-    }
-}
-
-class CountryRecord extends BaseRecord{
-
-    constructor(book: Book, country: string) {
-        super(book);
-        this.entityId = 'COUNTRY#' + country;
-    }
-}
-
-class LanguageRecord extends BaseRecord{
-
-    constructor(book: Book, language: string) {
-        super(book);
-        this.entityId = 'LANGUAGE#' + language;
-    }
-}
-
-class AuthorRecord extends BaseRecord{
-    constructor(book: Book, author: string) {
-        super(book);
-        this.entityId = 'AUTHOR#' + author;
-    }
 }
 
 function mapBookToRecords(book: Book): Array<BaseRecord|BookRecord> {

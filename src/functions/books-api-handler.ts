@@ -1,5 +1,6 @@
 import { APIGatewayProxyResult, APIGatewayEvent, APIGatewayProxyEvent } from 'aws-lambda';
-import { Book, BookMutation, deleteBook, getBookByFilter, getBooks, isBookKey, saveBook } from '../services/book-service';
+import { deleteBook, getBookByFilter, getBooks, isBookKey, saveBook } from '../services/book-service';
+import { Book, BookMutation } from "../services/models";
 import { injectLambdaContext, Logger } from '@aws-lambda-powertools/logger';
 import middy from '@middy/core';
 
