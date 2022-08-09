@@ -36,8 +36,6 @@ Do all use cases need to be handled (in the same way) by the admin or the end-us
 
 ## Datamodel
 
-TODO: Update model with author entity and incorporate bookData
-
 ![Datamodel diagram](datamodel.png)
 
 ## Non functional requirements
